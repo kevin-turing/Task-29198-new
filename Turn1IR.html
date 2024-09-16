@@ -3,120 +3,196 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>THEMIS & ARTEMIS Mission Visualization</title>
+  <title>Enhanced THEMIS & ARTEMIS Mission Visualization</title>
   <style>
-    body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; }
-    #info { position: absolute; top: 10px; left: 10px; color: white; background: rgba(0, 0, 0, 0.7); padding: 10px; border-radius: 5px; }
-    #timeline { position: absolute; bottom: 20px; width: 80%; left: 10%; }
-    #data-panel { position: absolute; top: 10px; right: 10px; color: white; background: rgba(0, 0, 0, 0.7); padding: 10px; border-radius: 5px; width: 300px; }
-    #hso-panel { position: absolute; bottom: 60px; right: 10px; color: white; background: rgba(0, 0, 0, 0.7); padding: 10px; border-radius: 5px; width: 300px; }
-    #events-panel { position: absolute; bottom: 60px; left: 10px; color: white; background: rgba(0, 0, 0, 0.7); padding: 10px; border-radius: 5px; width: 300px; }
+    body { 
+      margin: 0; 
+      overflow: hidden; 
+      font-family: Arial, sans-serif;
+      background-color: #000;
+      color: #fff;
+    }
+    #container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+    #info {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 10px;
+      border-radius: 5px;
+      max-width: 300px;
+    }
+    #data-panel {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 10px;
+      border-radius: 5px;
+      width: 300px;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    #timeline {
+      position: absolute;
+      bottom: 20px;
+      width: 90%;
+      left: 5%;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 10px;
+      border-radius: 5px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    #slider {
+      width: 100%;
+      margin-bottom: 10px;
+    }
+    .highlight {
+      color: #FFD700;
+      font-weight: bold;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: left;
+    }
+    th {
+      background-color: #4CAF50;
+      color: white;
+    }
+    .probe-label {
+      color: white;
+      font-size: 12px;
+      padding: 2px;
+      border-radius: 2px;
+    }
+    #probe-details {
+      position: absolute;
+      bottom: 100px;
+      left: 10px;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 10px;
+      border-radius: 5px;
+      max-width: 300px;
+    }
   </style>
 </head>
 <body>
-  <div id="info"></div>
-  <div id="data-panel"></div>
-  <div id="hso-panel"></div>
-  <div id="events-panel"></div>
-  <input type="range" id="timeline" min="0" max="4" step="1" value="0">
+  <div id="container">
+    <div id="info"></div>
+    <div id="data-panel"></div>
+    <div id="timeline">
+      <input type="range" id="slider" min="0" max="41" value="0" step="1">
+      <div id="stage-info"></div>
+    </div>
+    <div id="probe-details"></div>
+  </div>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/renderers/CSS2DRenderer.js"></script>
   <script>
-    let scene, camera, renderer, earth, probes = [], orbits = [];
+    let scene, camera, renderer, labelRenderer, earth, probes = [], orbits = [], labels = [];
+    let currentStage = 0;
     const stages = [
-  { 
-    name: "Launch", 
-    date: "2007-02-17", 
-    probePositions: [
-      { x: 0, y: 0, z: 0 }, // Placeholder positions for all probes
-      { x: 0, y: 0, z: 0 },
-      { x: 0, y: 0, z: 0 },
-      { x: 0, y: 0, z: 0 },
-      { x: 0, y: 0, z: 0 }
-    ],
-    hsoMissions: "THEMIS probes launched to study magnetospheric substorms.",
-    events: "Launch of THEMIS probes."
-  },
-  { 
-    name: "Orbit Placement Phase", 
-    date: "2007-09-15", 
-    probePositions: [
-      { x: 30, y: 0, z: 0 }, // Probe 1 at 30 Re
-      { x: 20, y: 0, z: 0 }, // Probe 2 at 20 Re
-      { x: 12, y: 0, z: 0 }, // Probes 3 and 4 at 12 Re
-      { x: 12, y: 0, z: 0 },
-      { x: 10, y: 0, z: 0 }  // Probe 5 at 10 Re
-    ],
-    hsoMissions: "Coordinated studies with Cluster and GOES missions.",
-    events: "Probes placed in their respective orbits."
-  },
-  { 
-    name: "Tail Science Phase", 
-    date: "2007-12-15", 
-    probePositions: [
-      { x: -30, y: 0, z: 0 }, // Probe 1 at -30 Re (magnetotail)
-      { x: -20, y: 0, z: 0 }, // Probe 2 at -20 Re (magnetotail)
-      { x: -12, y: 0, z: 0 }, // Probes 3 and 4 at -12 Re (magnetotail)
-      { x: -12, y: 0, z: 0 },
-      { x: -10, y: 0, z: 0 }  // Probe 5 at -10 Re (magnetotail)
-    ],
-    hsoMissions: "Coordinated studies with Geotail and Cluster missions.",
-    events: "Observation of magnetic reconnection and energy dissipation in the magnetotail."
-  },
-  { 
-    name: "Radiation Belt Science Phase", 
-    date: "2008-04-15", 
-    probePositions: [
-      { x: 30, y: 0, z: 0 }, // Probe 1 at 30 Re (dusk side)
-      { x: 20, y: 0, z: 0 }, // Probe 2 at 20 Re (dusk side)
-      { x: 12, y: 0, z: 0 }, // Probes 3 and 4 at 12 Re (dusk side)
-      { x: 12, y: 0, z: 0 },
-      { x: 10, y: 0, z: 0 }  // Probe 5 at 10 Re (dusk side)
-    ],
-    hsoMissions: "Coordinated studies with Van Allen Probes and GOES missions.",
-    events: "Study of radiation belt dynamics and particle acceleration."
-  },
-  { 
-    name: "Dayside Science Phase", 
-    date: "2008-06-15", 
-    probePositions: [
-      { x: 0, y: 30, z: 0 }, // Probe 1 at 30 Re (dayside)
-      { x: 0, y: 20, z: 0 }, // Probe 2 at 20 Re (dayside)
-      { x: 0, y: 12, z: 0 }, // Probes 3 and 4 at 12 Re (dayside)
-      { x: 0, y: 12, z: 0 },
-      { x: 0, y: 10, z: 0 }  // Probe 5 at 10 Re (dayside)
-    ],
-    hsoMissions: "Coordinated studies with Cluster and GOES missions.",
-    events: "Observation of dayside reconnection and solar wind-magnetosphere interaction."
-  },
-];
+      { name: "Injection or Coast Phase", date: "2007-02-15", apogee: [15.4, 15.4, 15.4, 15.4, 15.4], events: ["Right after launch all spacecraft are lined up in the same orbit with a 15.4 Re apogee"] },
+      { name: "Orbit Placement Phase", date: "2007-09-15", apogee: [30, 20, 12, 12, 10], events: ["The orbit placement phase is also called 'Dawn phase' because the apogee of the orbits are on the dawn side of the magnetosphere"] },
+      { name: "Tail Science Phase", date: "2007-12-15", apogee: [30, 20, 12, 12, 10], events: ["In the tail science phase the apogee of the orbits are in the magnetotail", "Major (4 day, P1, P2 and inner probe) Conjunctions", "Minor (2 day, P2 and inner probe) Conjunctions", "Daily (inner probes with GBOs) Conjunctions ->00:30-12:30UT"] },
+      { name: "Radiation Belt Science Phase", date: "2008-04-15", apogee: [30, 20, 12, 12, 10], events: ["The radiation belt science phase is also called the 'Dusk phase' because the apogee of the orbits are on the dusk side of the magnetosphere"] },
+      { name: "Dayside Science Phase", date: "2008-06-15", apogee: [30, 20, 12, 12, 10], events: ["In the dayside science phase the apogee of the orbits are on the dayside of the magnetosphere"] },
+      { name: "Dawn Phase", date: "2008-10-15", apogee: [30, 20, 12, 12, 12], events: ["The apogee of the orbits is on the dawn side of the magnetosphere"] },
+      { name: "Tail Science Phase", date: "2008-12-15", apogee: [30, 20, 12, 12, 12], events: ["In the tail science phase the apogee of the orbits are in the magnetotail"] },
+      { name: "Radiation Belt Science Phase", date: "2009-04-15", apogee: [30, 20, 12, 12, 12], events: ["The radiation belt science phase is also called the 'Dusk phase' because the apogee of the orbits are on the dusk side of the magnetosphere"] },
+      { name: "Dayside Science Phase", date: "2009-06-15", apogee: [30, 20, 12, 12, 13], events: ["In the dayside science phase the apogee of the orbits are on the dayside of the magnetosphere"] },
+      { name: "Dawn Phase", date: "2009-12-29", apogee: [null, null, 12, 12, 13], events: ["P1 and P2 have now become ARTEMIS", "In the dawn science phase the apogee of the P3, P4, and P5 orbits are on the dawnside of the magnetosphere"] },
+      { name: "Tail Science Phase", date: "2010-03-02", apogee: [null, null, 12, 12, 12], events: ["In the tail science phase the apogee of P3, P4, and P5 are approximately 12 Re", "The probes are separated by approximately 500 km to 3000 km"] },
+      { name: "Dusk Phase", date: "2010-06-01", apogee: [null, null, 12, 12, 12], events: ["In the dusk science phase the apogees of the P3, P4, and P5 orbits are approximately 12 Re and point towards the duskside sector"] },
+      { name: "Dayside Science Phase", date: "2010-09-02", apogee: [null, null, 12, 12, 12], events: ["In the dayside science phase the apogees of the P3, P4, and P5 orbits are approximately 12 Re", "The probes are separated by approximately 500 km to 3000 km"] },
+      { name: "Dawn Phase, ARTEMIS Mission begins", date: "2010-12-09", apogee: [null, null, 12, 12, 13], events: ["P1 and P2 have now become ARTEMIS", "In the dawn science phase the apogee of the P3, P4, and P5 orbits are on the dawnside of the magnetosphere", "Probes 3 and 4 have apogees at 12 Re, and Probe 5 has an apogee at 13 Re"] },
+      { name: "Tail Science Phase", date: "2011-03-16", apogee: [null, null, 12, 12, 12], events: ["In the tail science phase the apogee of P3, P4, and P5 are approximately 12 Re", "The probes are separated by approximately 500 km to 3000 km"] },
+      { name: "Dusk Phase", date: "2011-06-23", apogee: [null, null, 12, 12, 12], events: ["In the dusk science phase the apogees of the P3, P4, and P5 orbits are approximately 12 Re and point towards the duskside sector"] },
+      { name: "Dayside Science Phase", date: "2011-09-30", apogee: [null, null, 12, 12, 12], events: ["In the dayside science phase the apogees of the P3, P4, and P5 orbits are approximately 12 Re", "The probes are separated by approximately 500 km to 3000 km"] },
+      { name: "Dawn Phase", date: "2012-01-06", apogee: [null, null, 12, 12, 13], events: ["In the dawn science phase the apogee of the P3, P4, and P5 orbits are on the dawnside of the magnetosphere", "Probes 3 and 4 have apogees at 12 Re, and Probe 5 has an apogee at 13 Re"] },
+      { name: "Tail Science Phase", date: "2012-04-13", apogee: [null, null, 12, 12, 12], events: ["In the tail science phase the apogee of P3, P4, and P5 are approximately 12 Re", "The probes are separated by approximately 500 km to 3000 km"] },
+      { name: "Dusk Phase, Radiation Belt Science", date: "2012-10-15", apogee: [null, null, 12, 12, 12], events: ["In the dusk science phase the apogees of the P3, P4, and P5 orbits are approximately 12 Re and point towards the duskside sector"] },
+      { name: "Dayside Science Phase, Van Allen Probes (VAP) Conjunctions", date: "2012-11-27", apogee: [null, null, 12, 12, 12], events: ["In the dayside science phase the apogees of the P3, P4, and P5 orbits are approximately 12 Re", "The probes are separated by approximately 500 km to 3000 km"] },
+      { name: "Dawn Phase, VAP Conjunctions", date: "2013-03-04", apogee: [null, null, 12, 12, 13], events: ["In the dawn science phase the apogee of the P3, P4, and P5 orbits are on the dawnside of the magnetosphere", "Probes 3 and 4 have apogees at 12 Re, and Probe 5 has an apogee at 13 Re"] },
+      { name: "Tail Science Phase, VAP Conjunctions", date: "2013-06-11", apogee: [null, null, 12, 12, 12], events: ["In the tail science phase the apogee of P3, P4, and P5 are approximately 12 Re", "The probes are separated by approximately 500 km to 3000 km"] },
+      { name: "Dusk Phase, Radiation Belt Science, VAP Conjunctions", date: "2013-09-18", apogee: [null, null, 12, 12, 12], events: ["In the dusk science phase the apogees of the P3, P4, and P5 orbits are approximately 12 Re and point towards the duskside sector"] },
+      { name: "Dayside Science Phase, VAP Conjunctions", date: "2013-12-25", apogee: [null, null, 12, 12, 12], events: ["In the dayside science phase the apogees of the P3, P4, and P5 orbits are approximately 12 Re", "The probes are separated by approximately 500 km to 3000 km"] },
+      { name: "Dawn Phase, VAP Conjunctions", date: "2014-03-11", apogee: [null, null, 12, 12, 13], events: ["In the dawn science phase the apogee of the P3, P4, and P5 orbits are on the dawnside of the magnetosphere", "Probes 3 and 4 have apogees at 12 Re, and Probe 5 has an apogee at 13 Re"] },
+      { name: "Tail Science Phase, VAP Conjunctions", date: "2014-06-29", apogee: [null, null, 12, 12, 12], events: ["In the tail science phase the apogee of P3, P4, and P5 are approximately 12 Re", "The probes are separated by approximately 500 km to 3000 km"] },
+      { name: "Dusk Phase, Radiation Belt Science, VAP Conjunctions", date: "2014-10-17", apogee: [null, null, 12, 12, 12], events: ["In the dusk science phase the apogees of the P3, P4, and P5 orbits are approximately 12 Re and point towards the duskside sector"] },
+      { name: "Dayside Science Phase, VAP Conjunctions", date: "2015-01-22", apogee: [null, null, 12, 12, 12], events: ["In the dayside science phase the apogees of the P3, P4, and P5 orbits are approximately 12 Re", "The probes are separated by approximately 500 km to 3000 km", "Projected MMS launch and preliminary orbital maneuvers, systems checkout"] },
+      { name: "Dawn Phase, VAP Conjunctions", date: "2015-05-13", apogee: [null, null, 12, 12, 13], events: ["In the dawn science phase the apogee of the P3, P4, and P5 orbits are on the dawnside of the magnetosphere", "Probes 3 and 4 have apogees at 12 Re, and Probe 5 has an apogee at 13 Re", "MMS preliminary orbital maneuvers to coordinate with THEMIS observations"] },
+      { name: "Tail Science Phase, Heliophysics System Observatory (HSO) Optimization", date: "2015-08-31", apogee: [null, null, 12, 12, 12], events: ["In the tail science phase the apogee of P3, P4, and P5 are approximately 12 Re", "The probes are separated by 1000 km to a few Earth radii at apogee", "MMS is at opposition in dayside, and VAP is in the dusk sector"] },
+      { name: "Dusk Science Phase, HSO Optimization", date: "2015-12-20", apogee: [null, null, 12, 12, 12], events: ["In the dusk science phase the apogee of P3, P4, and P5 are approximately 12 Re", "The probes are separated by 1000 km to a few Earth radii at apogee", "MMS is at opposition in dawn, and VAP is in the dayside sector"] },
+      { name: "Dayside Science Phase, HSO Optimization", date: "2016-04-09", apogee: [null, null, 12, 12, 12], events: ["In the dayside science phase the apogee of P3, P4, and P5 are approximately 12Re", "The probes are separated by 1000 km to a few Earth radii at apogee", "MMS is at opposition in the tail at the plasma sheet boundary studying flux transport, and connects to VAP in the dawn sector"] },
+      { name: "Dawn Science Phase, HSO Optimization", date: "2016-07-30", apogee: [null, null, 12, 12, 12], events: ["In the dawn science phase the apogee of P3, P4, and P5 are approximately 12 Re", "The probes are separated by 1000 km to a few Earth radii at apogee", "MMS is at opposition in the dusk sector, and VAP is in the tail sector", "Coordinated L-shell crossings determine particle sources and wave contribution to inner magnetosphere particle flux growth/decay"] },
+      { name: "Tail Science Phase, HSO Optimization", date: "2016-10-28", apogee: [null, null, 12, 12, 12], events: ["In the tail science phase the apogee of P3, P4, and P5 are approximately 12 Re", "The probes are separated by 1000 km to a few Earth radii at apogee, to detect reconnection fronts, electron injections, and links to VAP waves in the dusk sector", "MMS is at opposition in the dayside, and VAP is in the dusk sector"] },
+      { name: "Dusk Science Phase, HSO Optimization", date: "2017-01-13", apogee: [null, null, 12, 12, 12], events: ["In the dusk science phase the apogee of P3, P4, and P5 are approximately 12 Re", "The probes are separated by 1000 km to a few Earth radii at apogee", "MMS is at opposition in the dawn sector in ascend phase (1x)", "L-shell crossings determine particle sources and wave contribution to inner magntosphere particle flux growth/decay", "VAP is in the dusk sector"] },
+      { name: "Dayside Science Phase, HSO Optimization", date: "2017-04-20", apogee: [null, null, 12, 12, 12], events: ["In the dayside science phase the apogee of P3, P4, and P5 are approximately 12 Re", "The probes are separated by 1000 km to a few Earth radii at apogee with MMS at opposition in the tail", "THM and MMS study dayside and nightside reconnection simultaneously", "VAP determines geoeffectiveness in the dusk sector"] },
+      { name: "Dawn Science Phase, HSO Optimization", date: "2017-07-23", apogee: [null, null, 12, 12, 12], events: ["In the dawn science phase the apogee of P3, P4, and P5 are approximately 12 Re", "The probes are separated by 1000 km to a few Earth radii at apogee", "MMS is at opposition in the dusk sector, and VAP is in the dayside sector", "THM is on MMS-resonant orbits, exploring asymmetries of reconnection and drivers of magnetopause boundary layer flows"] },
+      { name: "Tail Science Phase, HSO Optimization", date: "2018-02-13", apogee: [null, null, 12, 12, 12], events: ["In the tail science phase the apogee of P3, P4, and P5 are approximately 12 Re", "The probes are separated by 1000 km to a few Earth radii at apogee", "THM on sidereal period resonances, together with GBOs studies reconnection fronts, injections, links to VAP in the dawn sector", "MMS studies drivers at opposition in the dayside"] },
+      { name: "Dusk Science Phase, HSO Optimization", date: "2018-05-20", apogee: [null, null, 12, 12, 12], events: ["In the dusk science phase the apogee of P3, P4, and P5 are approximately 12 Re", "The probes are separated by 1000 km to a few Earth radii at apogee", "MMS is at opposition in the dawn sector, and VAP is in the tail sector", "THM is on MMS-resonant orbits, exploring asymmetries of reconnection and drivers of magnetopause boundary layer flows"] },
+      { name: "Dayside Science Phase, HSO Optimization", date: "2018-08-29", apogee: [null, null, 12, 12, 12], events: ["In the dayside science phase the apogee of P3, P4, and P5 are approximately 12 Re", "The probes are separated by 1000 km to a few Earth radii at apogee", "MMS is at opposition in the tail", "THM-MMS on resonant orbits, to study dayside-nightside reconnection simultaneously"] },
+      { name: "Dawn Science Phase, HSO Optimization", date: "2018-11-16", apogee: [null, null, 12, 12, 12], events: ["In the dayside science phase the apogee of P3, P4, and P5 are approximately 12 Re", "The probes are separated by 1000 km to a few Earth radii at apogee", "MMS is at opposition in the dayside", "THM-MMS on resonant orbits, to study dayside-nightside reconnection simultaneously"] },
+      { name: "Tail Science Phase, HSO Optimization", date: "2019-03-31", apogee: [null, null, 12, 16, 12], events: ["In the tail science phase the apogee of P3, P4, and P5 are approximately 12-16 Re", "MMS is at opposition in the dawn sector", "THM-MMS on resonant orbits, to study energy conversion further out in the magnetotail, as ART+MMS provide the high-fidelity solar wind and its variations due to foreshock interactions"] },
+      { name: "Dusk Science Phase, HSO Optimization", date: "2019-07-01", apogee: [null, null, 12, 16, 12], events: ["In the dusk science phase the apogee of P3, P4, and P5 are approximately 12-16 Re", "THM-MMS on resonant orbits, to study dayside-nightside reconnection simultaneously"] },
+      { name: "Dayside Science Phase, HSO Optimization", date: "2019-10-15", apogee: [null, null, 12, 16, 12], events: ["In the dayside science phase the apogee of P3, P4, and P5 are approximately 12-16 Re", "MMS is in the dusk sector on resonant orbits, to study the evolution of reconnection and its relationship to the growth of low-latitude boundary layer instabilities, such as Kelvin-Helmholtz"] },
+      { name: "Dawn Science Phase, HSO Optimization", date: "2020-01-01", apogee: [null, null, 12, 16, 12], events: ["In the dawn science phase the apogee of P3, P4, and P5 are approximately 12-16 Re", "MMS is in the dayside sector", "THM-MMS on resonant orbits, to study the dominant energy conversion in the tail from kinetic scale separations while MMS studies the link to inner magnetosphere"] },
+      { name: "Tail Science Phase, HSO Optimization", date: "2020-04-30", apogee: [null, null, 13, 13, 13], events: ["In the tail science phase the apogee of P3, P4, and P5 are approximately 13 Re", "MMS is in the dawn sector", "THM-MMS on resonant orbits, to study dayside-nightside reconnection simultaneously", "From its kinetic-scale separations THM explores the dissipation of flow and magnetic energy in the tail while MMS captures their effects in the inner magnetosphere"] },
+      { name: "Dusk Science Phase, HSO Optimization", date: "2020-08-15", apogee: [null, null, 13, 13, 13], events: ["In the dusk science phase the apogee of P3, P4, and P5 are approximately 13 Re", "MMS is in the tail", "THM is an MMS-resonant string-of-pearls, studying connections to both magnetopause and inner magnetosphere"] }
+    ];
 
     function init() {
       scene = new THREE.Scene();
       camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
       renderer = new THREE.WebGLRenderer({ antialias: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
-      document.body.appendChild(renderer.domElement);
+      document.getElementById('container').appendChild(renderer.domElement);
+
+      labelRenderer = new THREE.CSS2DRenderer();
+labelRenderer.setSize(window.innerWidth, window.innerHeight);
+labelRenderer.domElement.style.position = 'absolute';
+labelRenderer.domElement.style.top = '0px';
+labelRenderer.domElement.style.pointerEvents = 'none'; // Add this line
+document.getElementById('container').appendChild(labelRenderer.domElement);
 
       // Create Earth
       const earthGeometry = new THREE.SphereGeometry(1, 64, 64);
-      const earthTexture = new THREE.TextureLoader().load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/land_ocean_ice_cloud_2048.jpg');
-      const earthMaterial = new THREE.MeshBasicMaterial({ map: earthTexture });
+      const earthTexture = new THREE.TextureLoader().load('https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Solarsystemscope_texture_2k_earth_daymap.jpg/640px-Solarsystemscope_texture_2k_earth_daymap.jpg');
+      const earthMaterial = new THREE.MeshPhongMaterial({ map: earthTexture });
       earth = new THREE.Mesh(earthGeometry, earthMaterial);
       scene.add(earth);
 
       // Create probes
-      const probeGeometry = new THREE.SphereGeometry(0.05, 32, 32);
-      const probeMaterials = [
-        new THREE.MeshBasicMaterial({ color: 0xff0000 }),
-        new THREE.MeshBasicMaterial({ color: 0x00ff00 }),
-        new THREE.MeshBasicMaterial({ color: 0x0000ff }),
-        new THREE.MeshBasicMaterial({ color: 0xffff00 }),
-        new THREE.MeshBasicMaterial({ color: 0xff00ff }),
-      ];
+      const probeGeometry = new THREE.SphereGeometry(0.1, 32, 32);
+      const probeColors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff];
       for (let i = 0; i < 5; i++) {
-        const probe = new THREE.Mesh(probeGeometry, probeMaterials[i]);
+        const probeMaterial = new THREE.MeshPhongMaterial({ color: probeColors[i], emissive: probeColors[i], emissiveIntensity: 0.5 });
+        const probe = new THREE.Mesh(probeGeometry, probeMaterial);
         probes.push(probe);
         scene.add(probe);
+
+        // Create labels
+        const labelDiv = document.createElement('div');
+        labelDiv.className = 'probe-label';
+        labelDiv.textContent = `P${i + 1}`;
+        labelDiv.style.backgroundColor = '#' + probeColors[i].toString(16).padStart(6, '0');
+        const label = new THREE.CSS2DObject(labelDiv);
+        label.position.set(0, 0.2, 0);
+        probe.add(label);
+        labels.push(label);
       }
 
       // Create orbits
@@ -130,37 +206,91 @@
         scene.add(orbit);
       }
 
-      camera.position.set(0, 5, 10);
+      // Add lighting
+      const ambientLight = new THREE.AmbientLight(0x404040);
+      scene.add(ambientLight);
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+      directionalLight.position.set(5, 3, 5);
+      scene.add(directionalLight);
+
+      camera.position.set(0, 20, 30);
       camera.lookAt(0, 0, 0);
 
-      const timeline = document.getElementById('timeline');
-      timeline.addEventListener('input', updateStage);
-
-      updateStage();
+      setupSlider();
+      setupProbeInteraction();
+      updateStage(0);
       animate();
     }
 
-    function updateStage() {
-      const stageIndex = parseInt(document.getElementById('timeline').value);
+    function setupSlider() {
+      const slider = document.getElementById('slider');
+      const stageInfo = document.getElementById('stage-info');
+
+      slider.addEventListener('input', function() {
+        const stageIndex = parseInt(this.value);
+        updateStage(stageIndex);
+        stageInfo.textContent = `Stage ${stageIndex + 1}: ${stages[stageIndex].name}`;
+      });
+
+      stageInfo.textContent = `Stage 1: ${stages[0].name}`;
+    }
+
+    function setupProbeInteraction() {
+      const raycaster = new THREE.Raycaster();
+      const mouse = new THREE.Vector2();
+
+      window.addEventListener('mousemove', (event) => {
+        mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObjects(probes);
+
+        if (intersects.length > 0) {
+          const probeIndex = probes.indexOf(intersects[0].object);
+          showProbeDetails(probeIndex);
+        } else {
+          hideProbeDetails();
+        }
+      });
+    }
+
+    function showProbeDetails(probeIndex) {
+      const probeDetailsElement = document.getElementById('probe-details');
+      const stage = stages[currentStage];
+      const apogee = stage.apogee[probeIndex];
+
+      if (apogee !== null) {
+        probeDetailsElement.innerHTML = `
+          <h3>Probe ${probeIndex + 1}</h3>
+          <p>Apogee: ${apogee} Re</p>
+          <p>Status: Active</p>
+          <p>Mission: ${probeIndex < 2 ? 'ARTEMIS' : 'THEMIS'}</p>
+        `;
+        probeDetailsElement.style.display = 'block';
+      } else {
+        probeDetailsElement.style.display = 'none';
+      }
+    }
+
+    function hideProbeDetails() {
+      document.getElementById('probe-details').style.display = 'none';
+    }
+
+    function updateStage(stageIndex) {
+      currentStage = stageIndex;
       const stage = stages[stageIndex];
       
-      // Update probe positions based on stage data
+      // Update probe positions and orbits
       for (let i = 0; i < 5; i++) {
-        const position = stage.probePositions[i];
-        probes[i].position.set(position.x, position.y, position.z);
-      }
-
-      // Update orbit paths
-      for (let i = 0; i < 5; i++) {
-        const orbitPositions = orbits[i].geometry.attributes.position.array;
-        for (let j = 0; j < 360; j++) {
-          const angle = j * Math.PI / 180;
-          const radius = 2 + i * 0.5;
-          orbitPositions[j * 3] = radius * Math.cos(angle);
-          orbitPositions[j * 3 + 1] = 0;
-          orbitPositions[j * 3 + 2] = radius * Math.sin(angle);
+        const apogee = stage.apogee[i];
+        if (apogee !== null) {
+          updateProbeAndOrbit(i, apogee);
+        } else {
+          probes[i].visible = false;
+          orbits[i].visible = false;
+          labels[i].visible = false;
         }
-        orbits[i].geometry.attributes.position.needsUpdate = true;
       }
 
       // Update info panel
@@ -173,29 +303,50 @@
       document.getElementById('data-panel').innerHTML = `
         <h3>Probe Positions</h3>
         <table>
-          <tr><th>Probe</th><th>X</th><th>Y</th><th>Z</th></tr>
-          ${stage.probePositions.map((pos, i) => `
+          <tr><th>Probe</th><th>Apogee (Re)</th><th>Status</th></tr>
+          ${stage.apogee.map((apogee, i) => `
             <tr>
               <td>Probe ${i + 1}</td>
-              <td>${pos.x.toFixed(2)}</td>
-              <td>${pos.y.toFixed(2)}</td>
-              <td>${pos.z.toFixed(2)}</td>
+              <td>${apogee !== null ? apogee : 'N/A'}</td>
+              <td>${apogee !== null ? 'Active' : 'ARTEMIS'}</td>
             </tr>
           `).join('')}
         </table>
-      `;
-
-      // Update HSO missions panel
-      document.getElementById('hso-panel').innerHTML = `
-        <h3>Coordinated HSO Missions</h3>
-        <p>${stage.hsoMissions}</p>
-      `;
-
-      // Update events panel
-      document.getElementById('events-panel').innerHTML = `
         <h3>Key Events</h3>
-        <p>${stage.events}</p>
+        <ul>
+          ${stage.events.map(event => `<li>${highlightKeywords(event)}</li>`).join('')}
+        </ul>
       `;
+    }
+
+    function updateProbeAndOrbit(index, apogee) {
+      const angle = index * (Math.PI * 2 / 5); // Distribute probes evenly
+      const x = apogee * Math.cos(angle);
+      const z = apogee * Math.sin(angle);
+      probes[index].position.set(x, 0, z);
+      probes[index].visible = true;
+      labels[index].visible = true;
+
+      // Update orbit
+      const orbitPositions = orbits[index].geometry.attributes.position.array;
+      for (let i = 0; i < 360; i++) {
+        const orbitAngle = i * Math.PI / 180;
+        orbitPositions[i * 3] = apogee * Math.cos(orbitAngle);
+        orbitPositions[i * 3 + 1] = 0;
+        orbitPositions[i * 3 + 2] = apogee * Math.sin(orbitAngle);
+      }
+      orbits[index].geometry.attributes.position.needsUpdate = true;
+      orbits[index].visible = true;
+    }
+
+    function highlightKeywords(text) {
+      const keywords = ["reconnection", "energy", "dissipation", "apogee", "conjunctions", "ARTEMIS", "MMS", "VAP", "HSO"];
+      let highlightedText = text;
+      keywords.forEach(keyword => {
+        const regex = new RegExp(keyword, 'gi');
+        highlightedText = highlightedText.replace(regex, match => `<span class="highlight">${match}</span>`);
+      });
+      return highlightedText;
     }
 
     function animate() {
@@ -205,19 +356,30 @@
       earth.rotation.y += 0.002;
 
       // Animate probes
-      for (let i = 0; i < 5; i++) {
-        const probe = probes[i];
-        probe.position.x = probe.position.x * Math.cos(0.01) - probe.position.z * Math.sin(0.01);
-        probe.position.z = probe.position.z * Math.cos(0.01) + probe.position.x * Math.sin(0.01);
-      }
+      probes.forEach((probe, index) => {
+        if (probe.visible) {
+          const angle = (Date.now() * 0.0005 + index * (Math.PI * 2 / 5)) % (Math.PI * 2);
+          const radius = probe.position.length();
+          probe.position.x = radius * Math.cos(angle);
+          probe.position.z = radius * Math.sin(angle);
+        }
+      });
+
+      // Rotate camera around the scene
+      const cameraAngle = Date.now() * 0.0001;
+      camera.position.x = Math.sin(cameraAngle) * 30;
+      camera.position.z = Math.cos(cameraAngle) * 30;
+      camera.lookAt(0, 0, 0);
 
       renderer.render(scene, camera);
+      labelRenderer.render(scene, camera);
     }
 
     function onWindowResize() {
       camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  labelRenderer.setSize(window.innerWidth, window.innerHeight);
     }
 
     window.addEventListener('resize', onWindowResize, false);
